@@ -35,6 +35,7 @@ randomize=false
 here=`pwd`
 FSTYP=xfs
 xfile=""
+EXTERNAL_SCRIPTS=()
 
 # start the initialisation work now
 iam=check
@@ -79,6 +80,7 @@ check options
     -T			output timestamps
     -r			randomize test order
     --large-fs		optimise scratch device for large filesystems
+    --external FILE     use external testscript FILE, can be specified multiple times
 
 testlist options
     -g group[,group...]	include tests from these groups
@@ -236,6 +238,15 @@ while [ $# -gt 0 ]; do
 	--large-fs) export LARGE_SCRATCH_DEV=yes ;;
 	--extra-space=*) export SCRATCH_DEV_EMPTY_SPACE=${r#*=} ;;
 
+	--external)
+		xfile="$2"; shift;
+		if ! [ -f "$xfile" ]; then
+			echo "External script $xfile is not a file"
+			exit 1
+		fi
+		echo "Adding external script $xfile"
+		EXTERNAL_SCRIPTS+=("$xfile")
+
 	-*)	usage ;;
 	*)	# not an argument, we've got tests now.
 		have_test_arg=true ;;
@@ -249,6 +260,10 @@ while [ $# -gt 0 ]; do
 	fi
 
 	shift
+done
+
+for ext in ${EXTERNAL_SCRIPTS[*]}; do
+	echo "$ext" >> $tmp.list
 done
 
 # Process tests from command line now.
