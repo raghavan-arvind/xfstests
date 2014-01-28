@@ -3,34 +3,34 @@
 # - do not start group names with a digit
 # - comment line before each group is "new" description
 #
-001 auto quick
-002 auto
-003 auto
+001 auto quick btrfs:subvol
+002 auto btrfs:subvol
+003 auto btrfs:device
 004 auto rw metadata
-005 auto
+005 auto btrfs:defrag
 006 auto quick
 007 auto rw metadata
-008 auto quick
+008 auto quick btrfs:send
 009 auto quick
-010 auto quick
-011 auto
-012 auto
-013 auto quick
-014 auto
-015 auto quick
-016 auto quick
-017 auto quick
-018 auto quick
-019 auto quick
-020 auto quick
-021 auto quick
-022 auto
-023 auto
-024 auto quick
-025 auto quick
-026 auto quick
-027 auto quick
-028 auto quick
-029 auto quick
-030 auto quick
-031 auto quick
+010 auto quick btrfs:defrag
+011 auto btrfs:device
+012 auto btrfs:convert
+013 auto quick btrfs:balance
+014 auto btrfs:balance
+015 auto quick btrfs:subvol
+016 auto quick btrfs:send
+017 auto quick btrfs:subvol
+018 auto quick btrfs:subvol
+019 auto quick btrfs:send
+020 auto quick btrfs:device
+021 auto quick btrfs:balance btrfs:defrag
+022 auto btrfs:qgroup
+023 auto btrfs:qgroup
+024 auto quick btrfs:compress
+025 auto quick btrfs:send
+026 auto quick btrfs:clone
+027 auto quick btrfs:clone
+028 auto quick btrfs:clone
+029 auto quick btrfs:clone
+030 auto quick btrfs:send
+031 auto quick btrfs:clone
