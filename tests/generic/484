@@ -30,9 +30,6 @@ _cleanup()
 . ./common/filter
 . ./common/dmflakey
 
-# 256MB in byte
-fssize=$((2**20 * 256))
-
 # remove previous $seqres.full before test
 rm -f $seqres.full
 
@@ -41,11 +38,16 @@ _supported_fs generic
 _supported_os Linux
 _require_scratch_nocheck
 _require_dm_target flakey
+_require_fssum
 
 # initialize scratch device
-_scratch_mkfs_sized $fssize >> $seqres.full 2>&1
+_scratch_mkfs > $seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV
 _init_flakey
+_mount_flakey
+
+testdir=$SCRATCH_MNT/testdir
+mkdir $testdir
 
 stat_opt='-c  %n - blocks: %b size: %s inode: %i links: %h'
 
@@ -91,40 +93,28 @@ general_stat() {
 
 check_consistency()
 {
-	before=$(general_stat "$@")
+	local file="$1"
+	local sync_op="$2"
+
+	$XFS_IO_PROG -c $sync_op $file
+
+	before=$(general_stat $file)
 	_flakey_drop_and_remount
-	after=$(general_stat "$@")
+	after=$(general_stat $file)
 
 	if [ "$before" != "$after" ]; then
 		echo -e "Before:\n$before"
 		echo -e "After:\n$after"
 	fi
 
-	# Using _unmount_flakey nondeterministically fails here with
-	# "target is busy". Calling 'sync' doesn't fix the issue. Lazy
-	# unmount waits for lingering processes to exit.
-	$UMOUNT_PROG -l $SCRATCH_MNT
+	_unmount_flakey
 	_check_scratch_fs $FLAKEY_DEV
 }
 
 clean_dir()
 {
 	_mount_flakey
-	rm -rf $(find $SCRATCH_MNT/* | grep -v "lost+found")
-	$UMOUNT_PROG -l $SCRATCH_MNT
-}
-
-do_fsync_check() {
-	local file="$1"
-	local sync_op="$2"
-
-	if [ $sync_op == "fdatasync" ]; then
-		$XFS_IO_PROG -c "fdatasync" $file
-		check_consistency --data-only $file
-	else
-		$XFS_IO_PROG -c "fsync" $file
-		check_consistency $file
-	fi
+	rm -rf $testdir/*
 }
 
 # Wraps mv, deletes dest dir if exists.
@@ -139,25 +129,24 @@ function rename_template() {
 	local fsync_file="$3"
 	local fsync_command="$4"
 
-	_mount_flakey
 	mkdir -p $(dirname $file1)
 	touch $file1
 	mkdir -p $(dirname $file2)
 	rename $file1 $file2
-	do_fsync_check $fsync_file $fsync_command
+	check_consistency $fsync_file $fsync_command
 	clean_dir
 }
 
 file1_options=(
-	"$SCRATCH_MNT/A/C/bar"
-	"$SCRATCH_MNT/A/bar"
-	"$SCRATCH_MNT/A/foo"
-	"$SCRATCH_MNT/foo"
+	"$testdir/A/C/bar"
+	"$testdir/A/bar"
+	"$testdir/A/foo"
+	"$testdir/foo"
 )
 file2_options=(
-	"$SCRATCH_MNT/A/C/bar"
-	"$SCRATCH_MNT/A/bar"
-	"$SCRATCH_MNT/bar"
+	"$testdir/A/C/bar"
+	"$testdir/A/bar"
+	"$testdir/bar"
 )
 
 for file1 in ${file1_options[@]}; do
