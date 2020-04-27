@@ -150,9 +150,9 @@ usage(void)
 	fprintf(stderr, "    -[UGOAMCDXES]: exclude respective field from calculation\n");
 	fprintf(stderr, "    -n          : reset all flags\n");
 	fprintf(stderr, "    -N          : set all flags\n");
-	fprintf(stderr, "    -x path     : exclude path when building checksum (multiple ok)\n");
+	fprintf(stderr, "    -i path     : ignore path when building checksum (multiple ok)\n");
 	fprintf(stderr, "    -h          : this help\n\n");
-	fprintf(stderr, "The default field mask is ugoamCdES. If the checksum/manifest is read from a\n");
+	fprintf(stderr, "The default field mask is ugoamCdxES. If the checksum/manifest is read from a\n");
 	fprintf(stderr, "file, the mask is taken from there and the values given on the command line\n");
 	fprintf(stderr, "are ignored.\n");
 	exit(-1);
@@ -713,7 +713,7 @@ main(int argc, char *argv[])
 	int plen;
 	int elen;
 	int n_flags = 0;
-	const char *allopts = "heEfuUgGoOaAmMcCdDsSnNw:r:vx:";
+	const char *allopts = "heEfuUgGoOaAmMcCdDxXsSnNw:r:vi:";
 
 	out_fp = stdout;
 	while ((c = getopt(argc, argv, allopts)) != EOF) {
@@ -735,6 +735,8 @@ main(int argc, char *argv[])
 		case 'C':
 		case 'd':
 		case 'D':
+		case 'x':
+		case 'X':
 		case 'e':
 		case 'E':
 		case 's':
@@ -768,7 +770,7 @@ main(int argc, char *argv[])
 				exit(-1);
 			}
 			break;
-		case 'x':
+		case 'i':
 			++n_excludes;
 			excludes = realloc(excludes,
 					   sizeof(*excludes) * n_excludes);
