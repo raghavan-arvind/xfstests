@@ -29,6 +29,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <endian.h>
+#include <libgen.h>
 
 #define CS_SIZE 16
 #define CHUNKS	128
@@ -503,6 +504,89 @@ malformed:
 }
 
 void
+sum_meta(sum_t *meta, struct stat64 *st) {
+	if (!S_ISDIR(st->st_mode))
+		sum_add_u64(meta, st->st_nlink);
+	if (flags[FLAG_UID])
+		sum_add_u64(meta, st->st_uid);
+	if (flags[FLAG_GID])
+		sum_add_u64(meta, st->st_gid);
+	if (flags[FLAG_MODE])
+		sum_add_u64(meta, st->st_mode);
+	if (flags[FLAG_ATIME])
+		sum_add_time(meta, st->st_atime);
+	if (flags[FLAG_MTIME])
+		sum_add_time(meta, st->st_mtime);
+	if (flags[FLAG_CTIME])
+		sum_add_time(meta, st->st_ctime);
+}
+void
+print_manifest(char* path, sum_t *meta, sum_t *cs, struct stat64 *st) {
+	if (gen_manifest || in_manifest) {
+		char *fn;
+		char *m;
+		char *c;
+
+		if (S_ISDIR(st->st_mode))
+			strcat(path, "/");
+		fn = escape(path);
+		m = sum_to_string(meta);
+		c = sum_to_string(cs);
+
+		if (gen_manifest)
+			fprintf(out_fp, "%s %s %s\n", fn, m, c);
+		if (in_manifest)
+			check_manifest(fn, m, c, 0);
+		free(c);
+		free(m);
+		free(fn);
+	}
+}
+
+void
+sum_file(int fd, sum_t *finalcs, struct stat64 *st, char *path) {
+	int ret;
+	sum_file_data_t sum_file_data = flags[FLAG_STRUCTURE] ?
+			sum_file_data_strict : sum_file_data_permissive;
+
+	sum_t cs;
+	sum_t meta;
+
+	sum_init(&cs);
+	sum_init(&meta);
+
+	char* name = basename(path);
+	sum_add(&meta, name, strlen(name));
+	sum_meta(&meta, st);
+
+	if (flags[FLAG_XATTRS]) {
+		ret = sum_xattrs(fd, &meta);
+		if (ret < 0) {
+			fprintf(stderr, "failed to read xattrs from "
+					"%s: %s\n", path, strerror(-ret));
+			exit(-1);
+		}
+	}
+	sum_add_u64(&meta, st->st_size);
+	if (flags[FLAG_DATA]) {
+		ret = sum_file_data(fd, &cs);
+		if (ret < 0) {
+			fprintf(stderr, "read failed for %s: %s\n", path,
+					strerror(errno));
+			exit(-1);
+		}
+	}
+
+	sum_fini(&cs);
+	sum_fini(&meta);
+
+	print_manifest(path, &meta, &cs, st);
+
+	sum_add_sum(finalcs, &cs);
+	sum_add_sum(finalcs, &meta);
+}
+
+void
 sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 {
 	DIR *d;
@@ -582,20 +666,7 @@ sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 
 		sum_add_u64(&meta, level);
 		sum_add(&meta, namelist[i], strlen(namelist[i]));
-		if (!S_ISDIR(st.st_mode))
-			sum_add_u64(&meta, st.st_nlink);
-		if (flags[FLAG_UID])
-			sum_add_u64(&meta, st.st_uid);
-		if (flags[FLAG_GID])
-			sum_add_u64(&meta, st.st_gid);
-		if (flags[FLAG_MODE])
-			sum_add_u64(&meta, st.st_mode);
-		if (flags[FLAG_ATIME])
-			sum_add_time(&meta, st.st_atime);
-		if (flags[FLAG_MTIME])
-			sum_add_time(&meta, st.st_mtime);
-		if (flags[FLAG_CTIME])
-			sum_add_time(&meta, st.st_ctime);
+		sum_meta(&meta, &st);
 		if (flags[FLAG_XATTRS] &&
 		    (S_ISDIR(st.st_mode) || S_ISREG(st.st_mode))) {
 			fd = openat(dirfd, namelist[i], 0);
@@ -672,25 +743,9 @@ sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 		}
 		sum_fini(&cs);
 		sum_fini(&meta);
-		if (gen_manifest || in_manifest) {
-			char *fn;
-			char *m;
-			char *c;
 
-			if (S_ISDIR(st.st_mode))
-				strcat(path, "/");
-			fn = escape(path);
-			m = sum_to_string(&meta);
-			c = sum_to_string(&cs);
+		print_manifest(path, &meta, &cs, &st);
 
-			if (gen_manifest)
-				fprintf(out_fp, "%s %s %s\n", fn, m, c);
-			if (in_manifest)
-				check_manifest(fn, m, c, 0);
-			free(c);
-			free(m);
-			free(fn);
-		}
 		sum_add_sum(dircs, &cs);
 		sum_add_sum(dircs, &meta);
 next:
@@ -855,8 +910,22 @@ main(int argc, char *argv[])
 	if (gen_manifest)
 		fprintf(out_fp, "Flags: %s\n", flagstring);
 
+	struct stat64 path_st;
+	if (fstat64(fd, &path_st)) {
+		perror("fstat");
+		exit(-1);
+	}
+
 	sum_init(&cs);
-	sum(fd, 1, &cs, path, "");
+	if (S_ISDIR(path_st.st_mode)) {
+		sum(fd, 1, &cs, path, "");
+	} else if (S_ISREG(path_st.st_mode)) {
+		sum_file(fd, &cs, &path_st, path);
+	} else {
+		fprintf(stderr, "path must be file or dir: %s", path);
+		exit(-1);
+	}
+
 	sum_fini(&cs);
 
 	close(fd);
